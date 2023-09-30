@@ -28,6 +28,7 @@ type CustomValidator struct {
 	validator *validator.Validate
 }
 
+// StartHTTPServer starts a generalized server, the routes are handled in the respective worker handler
 func StartHTTPServer() *HTTPServer {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%s", utils.GetEnvOrDefault("HTTP_PORT", "8080")))
 	if err != nil {
@@ -81,7 +82,9 @@ func ValidateRequest(c echo.Context, s interface{}) error {
 }
 
 func (*HTTPServer) HealthCheck(c echo.Context) error {
-	return c.String(http.StatusOK, "ok")
+	return c.JSON(http.StatusOK, map[string]any{
+		"Role": utils.Role,
+	})
 }
 
 func (s *HTTPServer) Shutdown(ctx context.Context) error {

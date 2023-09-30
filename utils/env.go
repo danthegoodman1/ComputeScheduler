@@ -21,4 +21,7 @@ var (
 
 	ReservedCPU = MustGetEnvInt("RESERVED_CPU")
 	ReservedMem = MustGetEnvInt("RESERVED_MEM")
+
+	// dev,docker,firecracker
+	SupportedWorkloads = os.Getenv("SUPPORTED_WORKLOADS")
 )

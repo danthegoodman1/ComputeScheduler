@@ -9,6 +9,7 @@ import (
 	"github.com/danthegoodman1/GoAPITemplate/observability"
 	"github.com/danthegoodman1/GoAPITemplate/resources"
 	"github.com/danthegoodman1/GoAPITemplate/utils"
+	"github.com/danthegoodman1/GoAPITemplate/workload"
 	"github.com/joho/godotenv"
 	"net/http"
 	"os"
@@ -37,23 +38,18 @@ func main() {
 		}
 	}()
 
+	httpServer := http_server.StartHTTPServer()
+
 	// Figure out what process to run
 	if utils.IsWorker {
-		startWorker()
+		go startWorker(httpServer)
 	} else if utils.IsScheduler {
-		startScheduler()
+		go startScheduler(httpServer)
 	} else {
 		logger.Fatal().Msgf("unknown role '%s'", utils.Role)
 	}
-}
 
-func startWorker() {
-	logger.Debug().Msgf("starting compute WORKER '%s'", utils.Hostname)
-
-	resources.InitResourceManager()
-
-	httpServer := http_server.StartHTTPServer()
-
+	// Listen for shutdown signals
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
@@ -76,6 +72,18 @@ func startWorker() {
 	}
 }
 
-func startScheduler() {
+func startWorker(s *http_server.HTTPServer) {
+	logger.Debug().Msgf("starting compute WORKER '%s'", utils.Hostname)
+
+	resources.InitResourceManager()
+	err := workload.Init()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("error initializing workloads")
+	}
+	http_server.RegisterWorkerHandlers(s)
+}
+
+func startScheduler(s *http_server.HTTPServer) {
 	logger.Debug().Msgf("starting compute SCHEDULER '%s'", utils.Hostname)
+	http_server.RegisterSchedulerHandlers(s)
 }
