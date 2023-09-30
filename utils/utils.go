@@ -40,19 +40,37 @@ func GetEnvOrDefault(env, defaultVal string) string {
 	}
 }
 
+func MustEnv(env string) string {
+	e := os.Getenv(env)
+	if e == "" {
+		panic("missing env var for " + env)
+	} else {
+		return e
+	}
+}
+
 func GetEnvOrDefaultInt(env string, defaultVal int64) int64 {
 	e := os.Getenv(env)
 	if e == "" {
 		return defaultVal
 	} else {
-		intVal, err := strconv.ParseInt(e, 10, 16)
+		intVal, err := strconv.ParseInt(e, 10, 64)
 		if err != nil {
 			logger.Error().Msg(fmt.Sprintf("Failed to parse string to int '%s'", env))
 			os.Exit(1)
 		}
 
-		return (intVal)
+		return intVal
 	}
+}
+
+func MustGetEnvInt(env string) int64 {
+	e := os.Getenv(env)
+	intVal, err := strconv.ParseInt(e, 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return intVal
 }
 
 func GenRandomID(prefix string) string {

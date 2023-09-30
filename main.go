@@ -4,20 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/danthegoodman1/GoAPITemplate/gologger"
+	"github.com/danthegoodman1/GoAPITemplate/http_server"
 	"github.com/danthegoodman1/GoAPITemplate/observability"
-	"github.com/danthegoodman1/GoAPITemplate/temporal"
+	"github.com/danthegoodman1/GoAPITemplate/resources"
+	"github.com/danthegoodman1/GoAPITemplate/utils"
 	"github.com/joho/godotenv"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-
-	"github.com/danthegoodman1/GoAPITemplate/crdb"
-	"github.com/danthegoodman1/GoAPITemplate/gologger"
-	"github.com/danthegoodman1/GoAPITemplate/http_server"
-	"github.com/danthegoodman1/GoAPITemplate/migrations"
-	"github.com/danthegoodman1/GoAPITemplate/utils"
 )
 
 var logger = gologger.NewLogger()
@@ -30,31 +27,30 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	logger.Debug().Msg("starting Tangia mono api")
 
-	if err := crdb.ConnectToDB(); err != nil {
-		logger.Error().Err(err).Msg("error connecting to CRDB")
-		os.Exit(1)
-	}
+	go func() {
+		prometheusReporter := observability.NewPrometheusReporter()
+		err := observability.StartInternalHTTPServer(":8042", prometheusReporter)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error().Err(err).Msg("internal server couldn't start")
+			os.Exit(1)
+		}
+	}()
 
-	err := migrations.CheckMigrations(utils.CRDB_DSN)
-	if err != nil {
-		logger.Error().Err(err).Msg("Error checking migrations")
-		os.Exit(1)
+	// Figure out what process to run
+	if utils.IsWorker {
+		startWorker()
+	} else if utils.IsScheduler {
+		startScheduler()
+	} else {
+		logger.Fatal().Msgf("unknown role '%s'", utils.Role)
 	}
+}
 
-	prometheusReporter := observability.NewPrometheusReporter()
-	err = observability.StartInternalHTTPServer(":8042", prometheusReporter)
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		logger.Error().Err(err).Msg("internal server couldn't start")
-		os.Exit(1)
-	}
+func startWorker() {
+	logger.Debug().Msgf("starting compute WORKER '%s'", utils.Hostname)
 
-	err = temporal.Run(context.Background(), prometheusReporter)
-	if err != nil {
-		logger.Error().Err(err).Msg("Temporal init error")
-		os.Exit(1)
-	}
+	resources.InitResourceManager()
 
 	httpServer := http_server.StartHTTPServer()
 
@@ -78,4 +74,8 @@ func main() {
 	} else {
 		logger.Info().Msg("successfully shutdown HTTP server")
 	}
+}
+
+func startScheduler() {
+	logger.Debug().Msgf("starting compute SCHEDULER '%s'", utils.Hostname)
 }

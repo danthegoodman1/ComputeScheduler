@@ -1,4 +1,4 @@
-FROM golang:1.19.4 as build
+FROM golang:1.21.1-bullseye as build
 
 WORKDIR /app
 
@@ -6,11 +6,13 @@ WORKDIR /app
 ARG GIT_INSTEAD_OF=ssh://git@github.com/
 ARG GO_ARGS=""
 
-# Need ssh for private packages
-RUN mkdir /root/.ssh && echo "# github.com\n|1|ljja8g3oSggsnjO9rsrgs7Udx2s=|I6pPqynzf/0nwAnJ3LQ4n9n6Gc8= ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=\n|1|rFMG6UlqGl4xrNGGKf6FYK56sMU=|bLF794kw2BGoKCjiN696DX+dMh4= ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=" >> /root/.ssh/known_hosts
-RUN go env -w GOPRIVATE=github.com/<YOUR ORG>
-RUN git config --global url."${GIT_INSTEAD_OF}".insteadOf https://github.com/
-# END GIT PRIVATE SECTION
+# install overmind
+RUN go install github.com/DarthSim/overmind/v2@latest && mv $(go env GOPATH)/bin/overmind /
+
+# install serf
+RUN apt update && apt install unzip tmux -y
+RUN wget https://releases.hashicorp.com/serf/0.8.2/serf_0.8.2_linux_amd64.zip -O serf.zip \
+    && unzip serf.zip && mv serf /usr/local/bin && chmod a+x /usr/local/bin/serf
 
 COPY go.* /app/
 
@@ -26,7 +28,15 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build $GO_ARGS -o /app/outbin
 
 # Need glibc
-FROM gcr.io/distroless/base
+FROM gcr.io/distroless/base-debian11
 
-ENTRYPOINT ["/app/outbin"]
 COPY --from=build /app/outbin /app/
+COPY --from=build /overmind /
+COPY --from=build /usr/local/bin/serf /
+COPY --from=build /usr/bin/tmux /
+
+ENV OVERMIND_NO_PORT=1
+ENV OVERMIND_TIMEOUT=30
+ENV OVERMIND_PROCFILE=/app/procfile
+#ENV OVERMIND_CAN_DIE=serf_setup
+CMD overmind start

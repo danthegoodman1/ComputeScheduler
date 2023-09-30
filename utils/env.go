@@ -1,9 +1,24 @@
 package utils
 
-import "os"
+import (
+	"github.com/samber/lo"
+	"os"
+)
+
+const (
+	WorkerRole    = "WORKER"
+	SchedulerRole = "SCHEDULER"
+)
 
 var (
-	Env = os.Getenv("ENV")
+	Env      = os.Getenv("ENV")
+	Hostname = os.Getenv("HOSTNAME")
 
-	CRDB_DSN = os.Getenv("CRDB_DSN")
+	// Role is WorkerRole by default
+	Role        = lo.Ternary(os.Getenv("ROLE") == "", WorkerRole, os.Getenv("ROLE"))
+	IsWorker    = Role == WorkerRole
+	IsScheduler = Role == SchedulerRole
+
+	ReservedCPU = MustGetEnvInt("RESERVED_CPU")
+	ReservedMem = MustGetEnvInt("RESERVED_MEM")
 )

@@ -13,6 +13,9 @@ tasks:
   default:
     - go run .
 
+  docker:
+    - docker build -t computescheduler .
+
   single-test:
     cmds:
       - go test --count=1 -v {{.CLI_ARGS}}
