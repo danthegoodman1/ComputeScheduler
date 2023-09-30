@@ -109,12 +109,13 @@ func (e *Manager) StartDockerWorkload(ctx context.Context, workload Workload) er
 		return ErrUnknownPayload
 	}
 
-	// Pull image (will return fast if already here)
+	// Pull image if we don't (potentially) have it
 	if _, exists := e.pulledImages.Load(payload.Image); !exists {
 		_, err := dockerClient.ImagePull(ctx, payload.Image, dockertypes.ImagePullOptions{})
 		if err != nil {
 			return fmt.Errorf("error in dockerClient.ImagePull: %w", err)
 		}
+		e.pulledImages.Store(payload.Image, true)
 	}
 
 	// TODO: Create container blocking
