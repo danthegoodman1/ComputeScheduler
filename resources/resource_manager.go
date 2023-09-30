@@ -82,6 +82,7 @@ func (manager *ResourceManager) AllocateResources(resources Resources) (string, 
 	manager.allocations[allocID] = resources
 
 	// TODO: Metrics free resources
+	// TODO: Metrics allocations counter
 
 	return allocID, nil
 }
@@ -100,6 +101,8 @@ func (manager *ResourceManager) FreeAllocation(allocID string) error {
 	delete(manager.allocations, allocID)
 
 	// TODO: Metrics free resources
+	// TODO: Metrics allocations counter
+
 	return nil
 }
 
