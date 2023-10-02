@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/danthegoodman1/GoAPITemplate/gologger"
 	"github.com/danthegoodman1/GoAPITemplate/resources"
 	"github.com/danthegoodman1/GoAPITemplate/syncx"
 	"github.com/danthegoodman1/GoAPITemplate/utils"
@@ -19,15 +20,14 @@ var (
 	ErrUnknownPayload          = errors.New("unknown payload")
 	ErrUnsupportedWorkloadType = errors.New("unsupported workload type")
 
-	SupportedWorkloads = map[Type]bool{}
-
 	dockerClient *dockercli.Client
 )
 
 type (
-	Manager struct {
+	WorkloadManager struct {
 		// pulledImages serves as a much faster cache for checking whether we pulled an image. Is pessimistic (reset on server restart)
-		pulledImages syncx.Map[string, bool]
+		pulledImages       syncx.Map[string, bool]
+		SupportedWorkloads map[Type]bool
 	}
 	Workload struct {
 		Resources resources.Resources
@@ -45,22 +45,46 @@ const (
 	FirecrackerWorkload Type = "firecracker"
 )
 
+var (
+	logger  = gologger.NewLogger()
+	Manager *WorkloadManager
+)
+
 func Init() error {
-	workloads := strings.Split(utils.SupportedWorkloads, ",")
-	if len(workloads) == 0 {
-		SupportedWorkloads = map[Type]bool{
+	Manager = &WorkloadManager{
+		pulledImages: syncx.NewMap[string, bool](),
+	}
+
+	// Add in preinstalled image
+	for _, img := range strings.Split(utils.PreInstalledImages, ",") {
+		if img == "" {
+			continue
+		}
+		img := strings.TrimSpace(img)
+		logger.Debug().Msgf("Adding preinstalled image: %s", img)
+		Manager.pulledImages.Load(img)
+	}
+
+	if utils.SupportedWorkloads == "" {
+		logger.Debug().Msg("using default workloads of docker and dev")
+		Manager.SupportedWorkloads = map[Type]bool{
 			DevWorkload:    true,
 			DockerWorkload: true,
 		}
-	}
-	for _, workload := range workloads {
-		if string(DevWorkload) != workload && string(DockerWorkload) != workload && string(FirecrackerWorkload) != workload {
-			return ErrUnknownWorkloadType
+	} else {
+		workloads := strings.Split(utils.SupportedWorkloads, ",")
+		for _, workload := range workloads {
+			if workload == "" {
+				continue
+			}
+			if string(DevWorkload) != workload && string(DockerWorkload) != workload && string(FirecrackerWorkload) != workload {
+				return ErrUnknownWorkloadType
+			}
+			Manager.SupportedWorkloads[Type(workload)] = true
 		}
-		SupportedWorkloads[Type(workload)] = true
 	}
 
-	if SupportedWorkloads[DockerWorkload] {
+	if Manager.SupportedWorkloads[DockerWorkload] {
 		cli, err := dockercli.NewClientWithOpts(dockercli.FromEnv)
 		if err != nil {
 			return fmt.Errorf("error initializing docker client: %w", err)
@@ -73,7 +97,7 @@ func Init() error {
 }
 
 // StartWorkload will attempt to reserve resources and execute. Returns the workload ID.
-func (e *Manager) StartWorkload(ctx context.Context, workload Workload) (string, error) {
+func (e *WorkloadManager) StartWorkload(ctx context.Context, workload Workload) (string, error) {
 	workloadID := utils.GenRandomID("wrkl_")
 	logger := zerolog.Ctx(ctx).With().Str("workloadID", workloadID).Interface("workload", workload).Logger()
 	logger.Debug().Msg("starting workload")
@@ -100,8 +124,8 @@ type (
 	}
 )
 
-func (e *Manager) StartDockerWorkload(ctx context.Context, workload Workload) error {
-	if !SupportedWorkloads[DockerWorkload] {
+func (e *WorkloadManager) StartDockerWorkload(ctx context.Context, workload Workload) error {
+	if !e.SupportedWorkloads[DockerWorkload] {
 		return ErrUnsupportedWorkloadType
 	}
 	payload, ok := workload.Payload.(DockerPayload)

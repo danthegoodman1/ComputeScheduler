@@ -24,4 +24,7 @@ var (
 
 	// dev,docker,firecracker
 	SupportedWorkloads = os.Getenv("SUPPORTED_WORKLOADS")
+
+	// CSV of images that are already avialable, won't be pulled - image1,image2,image3:latest,...
+	PreInstalledImages = os.Getenv("PREINSTALLED_IMAGES")
 )
